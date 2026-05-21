@@ -66,6 +66,16 @@ on:
         required: false
         default: false
         type: boolean
+      extra_cmake_args:
+        description: 'Extra arguments appended to the CMake configure command'
+        required: false
+        default: ''
+        type: string
+      extra_publish_tags:
+        description: 'Additional release tag applied by publish-batch (single tag)'
+        required: false
+        default: ''
+        type: string
 
 jobs:
   prepare-strategy:
@@ -78,7 +88,7 @@ jobs:
         id: prepare-step
         shell: bash
         run: |
-          runner_list=$(python3 -c "$(wget -q -O - https://raw.githubusercontent.com/nodos-dev/actions/refs/heads/main/scripts/prep_runner_list.py)" \
+          runner_list=$(python3 -c "$(wget -q -O - https://raw.githubusercontent.com/zerodensity/actions/refs/heads/main/scripts/prep_runner_list.py)" \
             --workflow-input-linux ${{ inputs.linux }} \
             --workflow-input-windows ${{ inputs.windows }} \
             --sign ${{ inputs.sign_binaries }} \
@@ -303,7 +313,7 @@ jobs:
           } else {
             $pluginArgs = @("--plugin-dirs", "Module")
           }
-          ./${{ env.NOSMAN_EXECUTABLE_NAME }} dev gen --language-tool cpp/cmake --project-folder ../Project @pluginArgs -- -DCMAKE_BUILD_TYPE=Release
+          ./${{ env.NOSMAN_EXECUTABLE_NAME }} dev gen --language-tool cpp/cmake --project-folder ../Project @pluginArgs -- -DCMAKE_BUILD_TYPE=Release ${{ inputs.extra_cmake_args }}
           if ($LASTEXITCODE -ne 0) { throw "Configure failed with exit code $LASTEXITCODE" }
         working-directory: plugins-${{ inputs.ref_name }}/workspace
 
@@ -386,14 +396,21 @@ jobs:
             done
           fi
 
+          extra_tag_args=()
+          if [ -n "${{ inputs.extra_publish_tags }}" ]; then
+            extra_tag_args+=(--tag "${{ inputs.extra_publish_tags }}")
+          fi
+
           ../../${{ env.NOSMAN_EXECUTABLE_NAME }} \
             --workspace ../../ \
             publish-batch \
             --directory . \
             "${packages_args[@]}" \
+            "${extra_tag_args[@]}" \
             --version-suffix ".b${{ inputs.build_number }}" \
             --verbose \
-            --tag "${{ inputs.ref_name }}"
+            --tag "${{ inputs.ref_name }}" \
+            --visibility private
         working-directory: plugins-${{ inputs.ref_name }}/workspace/Module/plugins-repo
 
       - name: Publish (Force)
@@ -411,14 +428,21 @@ jobs:
             done
           fi
 
+          extra_tag_args=()
+          if [ -n "${{ inputs.extra_publish_tags }}" ]; then
+            extra_tag_args+=(--tag "${{ inputs.extra_publish_tags }}")
+          fi
+
           ../../${{ env.NOSMAN_EXECUTABLE_NAME }} \
             --workspace ../../ \
             publish-batch \
             --directory . \
             "${packages_args[@]}" \
+            "${extra_tag_args[@]}" \
             --version-suffix ".b${{ inputs.build_number }}" \
             --verbose \
             --tag "${{ inputs.ref_name }}" \
+            --visibility private \
             --publish-all
         working-directory: plugins-${{ inputs.ref_name }}/workspace/Module/plugins-repo
       
