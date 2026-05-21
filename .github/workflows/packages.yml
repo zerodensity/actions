@@ -83,7 +83,7 @@ jobs:
     runs-on: ${{ matrix.runner }}
 
     env:
-      GH_USERNAME: "nodos-bot"
+      GH_USERNAME: "zerodensitybot"
       GIT_EMAIL: "bot@nodos.dev"
       GH_TOKEN: ${{ secrets.CI_TOKEN }}
       NODOS_STORE_ACCESS_TOKEN: ${{ secrets.NODOS_STORE_ACCESS_TOKEN }}
