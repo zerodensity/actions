@@ -259,6 +259,33 @@ jobs:
           "MODULE_DIRS=$moduleDirsValue" >> $env:GITHUB_ENV
         working-directory: plugins-${{ inputs.ref_name }}/workspace
 
+      # Configure installs only the Plugin SDK a plugin declares, but generating
+      # the types of a store dependency needs the SDK that dependency is built
+      # with, or a newer one with the same major. A dependency built with a newer
+      # minor fails configure, so install the newest minor of each declared major.
+      - name: Install Plugin SDKs
+        if: ${{ env.LEGACY_WORKSPACE != 'true' }}
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $dirs = if ([string]::IsNullOrEmpty($env:MODULE_DIRS)) { @("Module") } else { $env:MODULE_DIRS -split ';' }
+          $majors = $dirs | ForEach-Object { Get-ChildItem -Path $_ -Recurse -File -Filter "*.nosmodule" } |
+            ForEach-Object { [regex]::Matches((Get-Content -Raw $_.FullName), '"sdk_version"\s*:\s*"(\d+)\.') } |
+            ForEach-Object { [int]$_.Groups[1].Value } | Sort-Object -Unique
+          if (-not $majors) { Write-Host "No plugin declares a Plugin SDK."; return }
+          $listOutput = & ./${{ env.NOSMAN_EXECUTABLE_NAME }} list --store --package-name nodos.sdk.plugin
+          if ($LASTEXITCODE -ne 0) { throw "Listing Plugin SDKs on the Nodos Store failed with exit code $LASTEXITCODE" }
+          $versions = $listOutput | ForEach-Object { $_ -replace "\x1B\[[0-9;]*[A-Za-z]", "" } |
+            Where-Object { $_ -match '^\s*(\d+)\.(\d+)\.\d+' } |
+            ForEach-Object { [pscustomobject]@{ Major = [int]$Matches[1]; Minor = [int]$Matches[2] } }
+          foreach ($major in $majors) {
+            $newest = $versions | Where-Object { $_.Major -eq $major } | Sort-Object Minor | Select-Object -Last 1
+            if (-not $newest) { Write-Host "::warning::No Plugin SDK $major.x on the Nodos Store."; continue }
+            & ./${{ env.NOSMAN_EXECUTABLE_NAME }} install nodos.sdk.plugin "$($newest.Major).$($newest.Minor)"
+            if ($LASTEXITCODE -ne 0) { throw "Installing Plugin SDK $($newest.Major).$($newest.Minor) failed with exit code $LASTEXITCODE" }
+          }
+        working-directory: plugins-${{ inputs.ref_name }}/workspace
+
       - name: Pre-Configure
         shell: pwsh
         run: |
